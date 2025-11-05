@@ -6,7 +6,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Classification from "./pages/Classification";
-import Upload from "./pages/Upload";
+import Biomarker from "./pages/Biomarker";
+import DrugRepurposing from "./pages/DrugRepurposing";
+import AIChat from './pages/AIChat';
+import Alphafold from './pages/Alphafold'
 import { MainLayout } from "./components/layout/MainLayout";
 import NotFound from "./pages/NotFound";
 
@@ -26,16 +29,11 @@ const App = () => (
           <Route path="/" element={<MainLayout />}>
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="classification" element={<Classification />} />
-            <Route path="biomarkers" element={<Dashboard />} />
-            <Route path="drug-discovery" element={<Dashboard />} />
-            <Route path="ai-agent" element={<Dashboard />} />
-            <Route path="protein-viewer" element={<Dashboard />} />
-            <Route path="upload" element={<Upload />} />
-            <Route path="analytics" element={<Dashboard />} />
-            <Route path="settings" element={<Dashboard />} />
+            <Route path="biomarkers" element={<Biomarker />} />
+            <Route path="drug-discovery" element={<DrugRepurposing />} />
+            <Route path="ai-agent" element={<AIChat />} />
+            <Route path="protein-viewer" element={<Alphafold />} />
           </Route>
-          
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

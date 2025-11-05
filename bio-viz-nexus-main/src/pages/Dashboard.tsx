@@ -123,16 +123,12 @@ export default function Dashboard() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, Dr. Chen</h1>
+          <h1 className="text-3xl font-bold">Welcome back, Dr. Saurav</h1>
           <p className="text-muted-foreground">
             Here's an overview of your multi-omics analysis platform
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="gap-2">
-            <Upload className="h-4 w-4" />
-            Upload Data
-          </Button>
           <Button variant="hero" className="gap-2">
             <Play className="h-4 w-4" />
             Quick Start
@@ -208,7 +204,7 @@ export default function Dashboard() {
                         asChild
                         variant="ghost" 
                         size="sm"
-                        className="w-full justify-between group-hover:bg-muted/50"
+                        className="w-full justify-between group-hover:bg-white color-black"
                       >
                         <Link to={feature.href}>
                           {action}

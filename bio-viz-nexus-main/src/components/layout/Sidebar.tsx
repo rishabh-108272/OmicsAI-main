@@ -24,9 +24,6 @@ const navigation = [
   { name: "Drug Repurposing", href: "/drug-discovery", icon: Pill },
   { name: "AI Agent", href: "/ai-agent", icon: MessageCircle },
   { name: "Protein Viewer", href: "/protein-viewer", icon: Atom },
-  { name: "Upload Data", href: "/upload", icon: Upload },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 interface SidebarProps {

@@ -84,9 +84,9 @@ export function Header({ onMenuClick, showMenuButton }: HeaderProps) {
             <DropdownMenuContent align="end">
               <div className="flex items-center justify-start gap-2 p-2">
                 <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">Dr. Sarah Chen</p>
+                  <p className="font-medium">Dr. Saurav Singh</p>
                   <p className="w-[200px] truncate text-sm text-muted-foreground">
-                    sarah.chen@medcenter.edu
+                    sauravsingh3648@gmail.com
                   </p>
                 </div>
               </div>
