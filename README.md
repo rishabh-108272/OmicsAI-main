@@ -99,7 +99,7 @@ All results are displayed on a unified dashboard for rapid interpretation.
 
 ### Backend Setup
 ```bash
-git clone [https://github.com/rishabh-108272/OmicsAI.git](https://github.com/rishabh-108272/OmicsAI-main.git)
+git clone https://github.com/rishabh-108272/OmicsAI.git
 cd OmicsAI
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
