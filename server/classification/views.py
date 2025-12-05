@@ -2,10 +2,13 @@ import os
 import uuid
 import logging
 import base64
+import json
+import networkx as nx
 import io
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -438,3 +441,326 @@ def export_report(request, session_id):
     except Exception as e:
         logger.error(f"Error in export: {str(e)}")
         return JsonResponse({'error': f'Export failed: {str(e)}'}, status=500)
+
+DGIDB_GRAPHQL_URL = "https://dgidb.org/api/graphql"
+
+DGIDB_GRAPHQL_QUERY = """
+query DrugInteractions($genes: [String!]) {
+  genes(names: $genes) {
+    nodes {
+      interactions {
+        drug {
+          name
+          conceptId
+        }
+        interactionScore
+        interactionTypes {
+          type
+          directionality
+        }
+        interactionAttributes {
+          name
+          value
+        }
+        publications {
+          pmid
+        }
+        sources {
+          sourceDbName
+        }
+      }
+    }
+  }
+}
+"""
+
+
+
+def fetch_dgidb_drugs_via_graphql(genes):
+    """
+    Query DGIdb GraphQL API for drug-gene interactions.
+
+    Returns:
+        dict: {
+            "GENE": [
+                {
+                  "drug_name": "...",
+                  "concept_id": "...",
+                  "score": ...,
+                  "types": [...],
+                  "publications": [...],
+                  "sources": [...],
+                },
+                ...
+            ]
+        }
+    """
+    if not genes:
+        return {}
+
+    # Normalized, unique gene names
+    unique_genes = sorted({str(g).strip() for g in genes if str(g).strip()})
+    if not unique_genes:
+        return {}
+
+    payload = {
+        "query": DGIDB_GRAPHQL_QUERY,
+        "variables": {"genes": unique_genes}
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    # ---- API call ----
+    try:
+        resp = requests.post(
+            DGIDB_GRAPHQL_URL,
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=30,
+        )
+    except Exception as e:
+        logger.error(f"DGIdb GraphQL network error: {e}")
+        return {}
+
+    # ---- Response validation ----
+    if resp.status_code != 200:
+        logger.warning(f"DGIdb returned {resp.status_code}: {resp.text[:200]}")
+        return {}
+
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.warning(f"DGIdb returned non-JSON response: {resp.text[:200]}")
+        return {}
+
+    if "errors" in data:
+        logger.warning(f"DGIdb GraphQL errors: {data['errors']}")
+        return {}
+
+    # ---- Parsing ----
+    # Expected shape:
+    # data -> genes -> nodes[] -> interactions[]
+    root = data.get("data", {}).get("genes", {})
+    nodes = root.get("nodes", []) or []
+
+    gene_to_drugs = {}
+
+    for gene_node in nodes:
+        interactions = gene_node.get("interactions", []) or []
+
+        for inter in interactions:
+            drug = inter.get("drug") or {}
+            drug_name = drug.get("name")
+            concept_id = drug.get("conceptId")
+
+            if not drug_name:
+                continue
+
+            # Determine gene by conceptId mapping (DGIdb nodes array is ordered same as input genes)
+            # We need to match back to gene names:
+            # So we iterate in same order `unique_genes`
+            for gene in unique_genes:
+                if gene not in gene_to_drugs:
+                    gene_to_drugs[gene] = []
+
+            # Find the gene by matching interaction list index
+            # DGIdb preserves order of input genes, so nodes align
+            gene_index = nodes.index(gene_node)
+            if gene_index < len(unique_genes):
+                gene_name = unique_genes[gene_index].upper()
+            else:
+                continue
+
+            gene_to_drugs[gene_name].append({
+                "drug_name": drug_name,
+                "concept_id": concept_id,
+                "score": inter.get("interactionScore"),
+                "types": [t.get("type") for t in inter.get("interactionTypes", [])],
+                "publications": [p.get("pmid") for p in inter.get("publications", [])],
+                "sources": [s.get("sourceDbName") for s in inter.get("sources", [])],
+            })
+
+    return gene_to_drugs
+
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def drug_repurposing_engine(request):
+    """
+    Build a PPI graph from uploaded CSV using NetworkX and run BFS
+    from seed biomarkers to identify nearby nodes (candidate targets),
+    then enrich those targets with drug information from DGIdb.
+    """
+    try:
+        if 'ppi_file' not in request.FILES:
+            return JsonResponse({'error': 'No PPI file uploaded (ppi_file required)'}, status=400)
+
+        uploaded_file = request.FILES['ppi_file']
+
+        if not uploaded_file.name.lower().endswith('.csv'):
+            return JsonResponse({'error': 'Only CSV files are allowed'}, status=400)
+
+        cancer_type = request.POST.get('cancer_type', 'LUAD_LUSC')
+
+        biomarkers_raw = request.POST.get('biomarkers', '[]')
+        try:
+            biomarkers = json.loads(biomarkers_raw)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid biomarkers JSON'}, status=400)
+
+        # Normalise biomarker list
+        if isinstance(biomarkers, str):
+            biomarkers = [b.strip() for b in biomarkers.split(',') if b.strip()]
+        biomarkers = [str(b).strip() for b in biomarkers if str(b).strip()]
+
+        if not biomarkers:
+            return JsonResponse({'error': 'At least one biomarker is required'}, status=400)
+
+        # Save file temporarily (consistent with your existing pattern)
+        file_path = f'tmp/ppi_{uuid.uuid4().hex}_{uploaded_file.name}'
+        saved_path = default_storage.save(file_path, uploaded_file)
+        full_path = default_storage.path(saved_path)
+
+        try:
+            df = pd.read_csv(full_path)
+
+            if df.empty:
+                raise ValueError("PPI CSV file is empty")
+
+            # --- Build NetworkX graph from CSV ---
+            if df.shape[1] < 2:
+                raise ValueError("PPI CSV must have at least two columns (source, target)")
+
+            src_col = df.columns[0]
+            tgt_col = df.columns[1]
+            weight_col = df.columns[2] if df.shape[1] > 2 else None
+
+            G = nx.Graph()
+
+            for _, row in df.iterrows():
+                src = str(row[src_col]).strip()
+                tgt = str(row[tgt_col]).strip()
+
+                if not src or not tgt or src == 'nan' or tgt == 'nan':
+                    continue
+
+                if weight_col is not None:
+                    try:
+                        weight = float(row[weight_col])
+                    except (ValueError, TypeError):
+                        weight = 1.0
+                    G.add_edge(src, tgt, weight=weight)
+                else:
+                    G.add_edge(src, tgt)
+
+            # --- BFS from biomarkers ---
+            max_hops = 2  # you can parameterise this later if needed
+            candidates_map = {}  # node -> best candidate info
+            subgraph_nodes = set()
+
+            for biomarker in biomarkers:
+                if biomarker not in G:
+                    continue
+
+                subgraph_nodes.add(biomarker)
+
+                lengths = nx.single_source_shortest_path_length(G, biomarker, cutoff=max_hops)
+
+                for node, dist in lengths.items():
+                    subgraph_nodes.add(node)
+                    if node == biomarker:
+                        continue
+
+                    # simple scoring: closer nodes get higher scores
+                    score = 1.0 / (dist + 1e-6)
+
+                    existing = candidates_map.get(node)
+                    if existing is None or score > existing['score']:
+                        candidates_map[node] = {
+                            'drug_name': None,  # will be filled after DGIdb query
+                            'target': node,
+                            'nearest_biomarker': biomarker,
+                            'hops_from_biomarker': dist,
+                            'score': score,
+                            'evidence': f'Nearest biomarker: {biomarker}, shortest path length: {dist}'
+                        }
+
+            # --- Enrich candidate targets with DGIdb drug info ---
+            MAX_DRUGS_PER_TARGET = 3
+            target_genes = list(candidates_map.keys())
+            dgidb_mapping = fetch_dgidb_drugs_via_graphql(target_genes)
+
+            for gene, info in candidates_map.items():
+                drugs_info = (
+                    dgidb_mapping.get(gene)
+                    or dgidb_mapping.get(gene.upper())
+                    or []
+                )
+                
+                drugs_info_sorted = sorted(
+                    drugs_info,
+                    key=lambda d: (d.get("score") or 0),
+                    reverse=True,
+                )
+                
+                top_drugs_info=drugs_info_sorted[:MAX_DRUGS_PER_TARGET]
+                simple_names = [d["drug_name"] for d in top_drugs_info]
+
+                info['drug_name'] = ", ".join(simple_names) if simple_names else None
+                info['drug_list'] = simple_names
+                info['drug_count'] = len(simple_names)
+                info['drug_details'] = drugs_info
+
+            # Build subgraph (only nodes within cutoff hops from any biomarker)
+            H = G.subgraph(subgraph_nodes).copy()
+
+            node_list = []
+            for n in H.nodes():
+                node_list.append({
+                    'id': n,
+                    'label': n,
+                    'is_biomarker': n in biomarkers,
+                    'degree': int(H.degree(n))
+                })
+
+            edge_list = []
+            for u, v, data in H.edges(data=True):
+                edge_list.append({
+                    'source': u,
+                    'target': v,
+                    'weight': float(data.get('weight', 1.0))
+                })
+
+            candidates = sorted(
+                candidates_map.values(),
+                key=lambda x: (x['hops_from_biomarker'], -x['score'], x['target'])
+            )
+
+            response_data = {
+                'status': 'success',
+                'cancer_type': cancer_type,
+                'biomarkers': biomarkers,
+                'graph': {
+                    'num_nodes': G.number_of_nodes(),
+                    'num_edges': G.number_of_edges(),
+                    'subgraph': {
+                        'nodes': node_list,
+                        'edges': edge_list
+                    }
+                },
+                'candidates': candidates
+            }
+
+            return JsonResponse(response_data)
+
+        finally:
+            if os.path.exists(full_path):
+                os.remove(full_path)
+
+    except Exception as e:
+        logger.error(f"Drug repurposing engine error: {str(e)}")
+        return JsonResponse({'error': f'Drug repurposing failed: {str(e)}'}, status=500)

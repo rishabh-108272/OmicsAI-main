@@ -9,6 +9,7 @@ urlpatterns = [
     path('classification/export/<uuid:session_id>/', views.export_report, name='export_report'),
     path('classification/history/', views.get_analysis_history, name='history'),
 
-    # New path for XAI SHAP explanation graph generation
     path('classification/xai/graph/', views.generate_xai_graph, name='generate_xai_graph'),
+    path('classification/drug-repurposing/', views.drug_repurposing_engine, name='drug_repurposing'),
+    path('classification/ai-agent/', views.ai-agent, name='ai_agent'),
 ]
