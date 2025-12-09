@@ -20,7 +20,7 @@ from .ml_service import ml_service
 from .colorectal_cancer import colorectal_cancer_service
 from .liver_cancer import liver_cancer_service
 import shap
-
+from .ai_agent import run_multi_agent_rag
 logger = logging.getLogger(__name__)
 
 def align_patient_vector(df, feature_names):
@@ -34,36 +34,7 @@ def align_patient_vector(df, feature_names):
     values_array = np.array(values).reshape(1, -1)  # Reshape to (1, n)
     return values_array
 
-def generate_shap_bar_plot(model, df, feature_names, top_n=20):
-    try:
-        X = align_patient_vector(df, feature_names)
-        explainer = shap.KernelExplainer(model.predict_proba, X)
-        shap_values = explainer.shap_values(X)
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]
-        shap_vals = shap_values[0]
 
-        # Sort features by absolute SHAP value
-        abs_shap = pd.Series(abs(shap_vals), index=feature_names)
-        top_features = abs_shap.nlargest(top_n).index
-        shap_vals_top = pd.Series(shap_vals, index=feature_names).loc[top_features]
-
-        colors = ['#e74c3c' if v > 0 else '#3498db' for v in shap_vals_top]
-
-        plt.switch_backend('Agg')
-        plt.figure(figsize=(8, max(5, 0.4 * len(top_features))))
-        shap_vals_top.sort_values().plot.barh(color=colors)
-        plt.xlabel('SHAP value (feature impact)')
-        plt.title(f'Top {top_n} Gene Contributions to Prediction')
-        plt.tight_layout()
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', bbox_inches='tight')
-        plt.close()
-        buffer.seek(0)
-        return base64.b64encode(buffer.read()).decode()
-    except Exception as e:
-        logger.error(f'SHAP bar plot generation failed: {e}')
-        raise
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -184,17 +155,21 @@ def analyze_classification(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def generate_xai_graph(request):
-    if 'file' not in request.FILES:
-        return JsonResponse({'error': 'No file uploaded'}, status=400)
+    """
+    Generate biomarker explanation plot.
+
+    - colorectal_cancer  → |logistic regression coefficients|
+    - liver_cancer       → |logistic regression coefficients|
+    - lung_cancer        → SHAP on PCA features
+    """
     try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'No CSV uploaded'}, status=400)
+
         uploaded_file = request.FILES['file']
-        if not uploaded_file.name.lower().endswith('.csv'):
-            return JsonResponse({'error': 'Only CSV files are allowed'}, status=400)
+        model_type = request.POST.get('model_type', 'lung_cancer')
 
-        model_type = request.POST.get('model_type')
-        if not model_type:
-            return JsonResponse({'error': 'Model type is required'}, status=400)
-
+        # --- Select service based on model_type ---
         if model_type == 'lung_cancer':
             service = ml_service
         elif model_type == 'colorectal_cancer':
@@ -202,36 +177,153 @@ def generate_xai_graph(request):
         elif model_type == 'liver_cancer':
             service = liver_cancer_service
         else:
-            return JsonResponse({'error': 'Unknown model type'}, status=400)
+            return JsonResponse({'error': f'Unknown model type {model_type}'}, status=400)
 
         if not service.model_loaded:
-            return JsonResponse({'error': 'Model not loaded'}, status=500)
+            return JsonResponse({'error': 'ML model not loaded'}, status=500)
 
-        tmp_file_path = f'tmp/{uuid.uuid4()}.csv'
-        saved_path = default_storage.save(tmp_file_path, uploaded_file)
-        full_path = default_storage.path(saved_path)
+        logger.info(f"[XAI] model_type={model_type}, service={service.__class__.__name__}")
+
+        # --- Save & read CSV ---
+        tmp_path = default_storage.save(f'tmp/{uuid.uuid4()}.csv', uploaded_file)
+        full_path = default_storage.path(tmp_path)
 
         df = pd.read_csv(full_path, index_col=0)
         if df.empty:
-            raise ValueError("CSV file is empty")
+            return JsonResponse({'error': 'CSV file is empty'}, status=400)
 
-        feature_names = getattr(service, "feature_names", df.index.tolist())
-        image_base64 = generate_shap_bar_plot(service.model, df, feature_names, top_n=20)
+        # --- Preprocess for this model ---
+        processed_input = service.preprocess_patient_data(df)   # (n_samples, n_features)
+        model = service.model
+        feature_names = service.feature_names
 
+        # Clean temp file early
         if os.path.exists(full_path):
             os.remove(full_path)
 
-        return JsonResponse({
-            'image_base64': image_base64,
-            'model_type': model_type,
-            'status': 'success',
-        })
+        if feature_names is None:
+            raise ValueError("service.feature_names is None; cannot map importances to genes")
+
+        # =========================================================
+        #   A) Colorectal → logistic regression coefficients
+        # =========================================================
+        if model_type == 'colorectal_cancer' and hasattr(model, "coef_"):
+            coef = np.abs(model.coef_)
+            if coef.ndim == 2:
+                importance = coef.mean(axis=0)
+            else:
+                importance = coef
+
+            importance = np.array(importance).ravel()
+            feature_arr = np.array(feature_names).ravel().tolist()
+
+            if len(importance) != len(feature_arr):
+                raise ValueError(
+                    f"[CRC] Length mismatch in coef importances: {len(feature_arr)} vs {len(importance)}"
+                )
+
+            importance_df = (
+                pd.DataFrame({"gene": feature_arr, "importance": importance})
+                  .sort_values("importance", ascending=False)
+            )
+
+        # =========================================================
+        #   B) Liver → logistic regression coefficients
+        # =========================================================
+        elif model_type == 'liver_cancer' and hasattr(model, "coef_"):
+            coef = np.abs(model.coef_)
+            if coef.ndim == 2:
+                importance = coef.mean(axis=0)
+            else:
+                importance = coef
+
+            importance = np.array(importance).ravel()
+            feature_arr = np.array(feature_names).ravel().tolist()
+
+            if len(importance) != len(feature_arr):
+                raise ValueError(
+                    f"[Liver] Length mismatch in coef importances: {len(feature_arr)} vs {len(importance)}"
+                )
+
+            importance_df = (
+                pd.DataFrame({"gene": feature_arr, "importance": importance})
+                  .sort_values("importance", ascending=False)
+            )
+
+        # =========================================================
+        #   C) Lung → SHAP on PCA features
+        # =========================================================
+        else:
+            # --- SHAP computation for lung PCA MLP ---
+            try:
+                # For generic models (Keras MLP), use KernelExplainer on predict_proba
+                if hasattr(model, "predict_proba"):
+                    f = model.predict_proba
+                else:
+                    # Keras model: wrap to return numpy
+                    def f(x):
+                        return model.predict(x, verbose=0)
+
+                # Simple background: few copies of the sample (cheap & stable)
+                if processed_input.shape[0] == 1:
+                    background = np.repeat(processed_input, 10, axis=0)
+                else:
+                    background = processed_input
+
+                explainer = shap.KernelExplainer(f, background)
+                shap_values = explainer.shap_values(processed_input)
+            except Exception as e:
+                raise ValueError(f"SHAP computation failed for lung model: {e}")
+
+            # Normalize shape
+            if isinstance(shap_values, list):
+                shap_matrix = np.mean([np.abs(sv) for sv in shap_values], axis=0)
+            else:
+                shap_matrix = np.abs(shap_values)
+                if shap_matrix.ndim == 3:
+                    shap_matrix = shap_matrix.mean(axis=-1)
+
+            # Local vs global
+            if processed_input.shape[0] == 1:
+                importance = shap_matrix[0]
+            else:
+                importance = shap_matrix.mean(axis=0)
+
+            importance = np.array(importance).ravel()
+            feature_arr = np.array(feature_names).ravel().tolist()
+
+            if importance.ndim != 1:
+                raise ValueError(f"[Lung] Expected 1D importance, got {importance.shape}")
+            if len(importance) != len(feature_arr):
+                raise ValueError(
+                    f"[Lung] Length mismatch: {len(feature_arr)} feature names vs {len(importance)} values"
+                )
+
+            importance_df = (
+                pd.DataFrame({"gene": feature_arr, "importance": importance})
+                  .sort_values("importance", ascending=False)
+            )
+
+        # --- Plot top-20 biomarkers ---
+        top_df = importance_df.head(20).iloc[::-1]
+        plt.figure(figsize=(8, 6))
+        plt.barh(top_df["gene"], top_df["importance"])
+        plt.xlabel("Feature importance")
+        plt.title(f"Top 20 Biomarkers - {model_type.replace('_', ' ').title()}")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=150)
+        plt.close()
+        buf.seek(0)
+        base64_img = base64.b64encode(buf.read()).decode("utf-8")
+
+        return JsonResponse({"image": base64_img, "status": "success"})
 
     except Exception as e:
-        logger.error(f'SHAP generation error: {e}')
-        return JsonResponse({'error': f'Failed to generate SHAP graph: {str(e)}'}, status=500)
+        logger.error(f"SHAP generation failed: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
 
-# Other existing views (get_results, get_analysis_history, export_report) remain unchanged and should be included as per previous versions.
 
 
 @csrf_exempt
@@ -299,18 +391,25 @@ def analyze_classification(request):
                 if df.empty:
                     raise ValueError("CSV file is empty")
 
-                if model_type == 'colorectal_cancer' or model_type == 'liver_cancer':
+                # 🔹 Different preprocessing, but unified result object
+                if model_type in ('colorectal_cancer', 'liver_cancer'):
                     preprocessed_data = service.preprocess_patient_data(df)
                     predicted_class, predicted_prob = service.predict(preprocessed_data)
                     individual_results = service.format_results(predicted_class, predicted_prob)
-                    model_performance = []
-                else:
+                else:  # lung_cancer
                     data_array, gene_names = service.preprocess_rna_seq_data(df)
                     predicted_classes, probabilities = service.predict(data_array)
                     individual_results = service.format_classification_results(
                         predicted_classes, probabilities, gene_names, data_array.flatten()
                     )
+
+                # 🔥 Unified model specification logic
+                if hasattr(service, "get_model_specifications"):
+                    model_performance = service.get_model_specifications()
+                elif hasattr(service, "calculate_model_performance"):
                     model_performance = service.calculate_model_performance()
+                else:
+                    model_performance = []
 
                 ClassificationResult.objects.create(
                     analysis_session=session,
@@ -355,6 +454,7 @@ def analyze_classification(request):
     except Exception as e:
         logger.error(f"Request processing failed: {str(e)}")
         return JsonResponse({'error': f'Analysis failed: {str(e)}'}, status=500)
+
 
 
 @require_http_methods(["GET"])
@@ -764,3 +864,29 @@ def drug_repurposing_engine(request):
     except Exception as e:
         logger.error(f"Drug repurposing engine error: {str(e)}")
         return JsonResponse({'error': f'Drug repurposing failed: {str(e)}'}, status=500)
+    
+@csrf_exempt
+def multi_agent_rag_view(request):
+  if request.method != "POST":
+    return JsonResponse({"error": "POST required"}, status=405)
+
+  try:
+    body = json.loads(request.body.decode("utf-8"))
+  except Exception:
+    return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+  question = (body.get("question") or "").strip()
+  if not question:
+    return JsonResponse({"error": "Field 'question' is required"}, status=400)
+
+  try:
+    result = run_multi_agent_rag(question)
+    return JsonResponse(result, status=200)
+  except Exception as e:
+    # Log and return safe error
+    import logging
+    logging.exception("Multi-agent RAG error: %s", e)
+    return JsonResponse(
+      {"error": "Multi-agent RAG pipeline failed.", "details": str(e)},
+      status=500,
+    )

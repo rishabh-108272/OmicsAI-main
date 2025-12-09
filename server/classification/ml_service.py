@@ -16,7 +16,7 @@ class LungCancerMLService:
         self.model = None
         self.scaler = StandardScaler()
         self.pca_transformer = None
-        self.feature_names = None
+        self.feature_names = None          # 🔹 Will hold feature names used for SHAP
         self.model_loaded = False
         self.expected_features = None
         try:
@@ -34,6 +34,7 @@ class LungCancerMLService:
             raise FileNotFoundError(f"Model file not found at {model_path}")
 
         try:
+            # 🔹 This is your trained classifier — satisfies service.model requirement
             self.model = keras.models.load_model(model_path)
             logger.info("Model loaded successfully")
         except Exception as e:
@@ -53,6 +54,14 @@ class LungCancerMLService:
             self.pca_transformer = None
             self.expected_features = self.model.input_shape[1]
 
+        # 🔹 Initialize feature_names based on model input dimension
+        # If PCA is used, features are PCA components (PC1, PC2, ...)
+        if self.pca_transformer is not None and self.expected_features is not None:
+            self.feature_names = [f"PC{i+1}" for i in range(self.expected_features)]
+        else:
+            # Will be set later from data when no PCA
+            self.feature_names = None
+
         self.model_loaded = True
 
     def preprocess_rna_seq_data(self, df):
@@ -69,24 +78,41 @@ class LungCancerMLService:
             input_vector = df_transposed.values
             logger.debug(f"Input vector shape before reshape check: {input_vector.shape}")
 
-            # --- FIX: Ensure the input is always a 2D array for the transformer ---
-            # This robustly handles the case where the input might be a single patient (1D array).
+            # Ensure the input is always 2D
             if input_vector.ndim == 1:
                 input_vector = input_vector.reshape(1, -1)
                 logger.info("Reshaped 1D input vector to 2D for a single sample.")
-            # --------------------------------------------------------------------
 
             if self.pca_transformer:
                 data_transformed = self.pca_transformer.transform(input_vector)
                 logger.info(f"Data shape after PCA: {data_transformed.shape}")
+
+                # 🔹 If PCA is used, SHAP will be over PCA components
+                self.feature_names = [f"PC{i+1}" for i in range(data_transformed.shape[1])]
             else:
                 data_transformed = input_vector
 
+                # 🔹 If no PCA, features correspond to genes (row index of df_clean)
+                self.feature_names = df_clean.index.tolist()
+
+            # 🔹 Keep returning gene index list for existing code that uses gene_names
             return data_transformed, df_clean.index.tolist()
 
         except Exception as e:
             logger.error(f"Error in preprocessing: {e}")
             raise
+
+    # 🔹 New method: used by SHAP endpoint to preprocess patient CSV
+    def preprocess_patient_data(self, df):
+        """
+        Preprocess a single (or multiple) patient RNA-seq CSV for SHAP/XAI.
+
+        Uses the same pipeline as preprocess_rna_seq_data but returns only
+        the model-ready array. self.feature_names is set inside
+        preprocess_rna_seq_data and will be used by SHAP.
+        """
+        data_array, _ = self.preprocess_rna_seq_data(df)
+        return data_array
 
     def predict(self, data_array):
         if not self.model_loaded:

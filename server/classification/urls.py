@@ -11,5 +11,5 @@ urlpatterns = [
 
     path('classification/xai/graph/', views.generate_xai_graph, name='generate_xai_graph'),
     path('classification/drug-repurposing/', views.drug_repurposing_engine, name='drug_repurposing'),
-    path('classification/ai-agent/', views.ai-agent, name='ai_agent'),
+    path('classification/ai-agent/', views.multi_agent_rag_view, name='ai_agent'),
 ]

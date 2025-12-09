@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-
 const DrugRepurposing = () => {
   const [cancerType, setCancerType] = useState("LUAD_LUSC");
   const [ppiFile, setPpiFile] = useState(null);

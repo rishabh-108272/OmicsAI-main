@@ -119,9 +119,7 @@ export default function Classification() {
           <p className="text-muted-foreground mt-2">Upload single patient RNA-seq CSV for classification</p>
         </div>
 
-        {/*
-          Model Type Selector Dropdown now including Liver Cancer option
-        */}
+        {/* Model Type Selector */}
         <select
           className="mr-4 p-2 border rounded bg-background"
           value={selectedModel}
@@ -218,7 +216,7 @@ export default function Classification() {
           <Tabs defaultValue="results" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="results">Classification Result</TabsTrigger>
-              <TabsTrigger value="performance">Model Performance</TabsTrigger>
+              <TabsTrigger value="performance">Model Specification</TabsTrigger>
             </TabsList>
 
             <TabsContent value="results">
@@ -226,9 +224,22 @@ export default function Classification() {
                 <CardTitle>Prediction Result for Patient ID: {patientMetadata.patientId || 'N/A'}</CardTitle>
                 {classificationResult ? (
                   <>
-                    <p>Predicted Class: <b>{classificationResult.label}</b></p>
-                    <p>Confidence: <b>{classificationResult.confidence}%</b></p>
-                    <p>Probability: <b>{classificationResult.probability}%</b></p>
+                    {/* 👇 Beautified Predicted Class Display with Tailwind CSS Gradient */}
+                    <p className="text-xl font-extrabold tracking-tight">
+                      Predicted Class:
+                      <span className="
+                        ml-2
+                        text-4xl                      
+                        font-extrabold
+                        bg-clip-text                  
+                        text-transparent              
+                        bg-gradient-to-r              
+                        from-blue-600 to-purple-600   
+                        dark:from-blue-400 dark:to-purple-400 
+                      ">
+                        {classificationResult.label}
+                      </span>
+                    </p>
                   </>
                 ) : (
                   <p className="text-muted-foreground">Run analysis to see prediction results.</p>
@@ -238,17 +249,17 @@ export default function Classification() {
 
             <TabsContent value="performance">
               <Card className="border-none shadow-medium p-6">
-                <CardTitle>Model Performance Metrics</CardTitle>
+                <CardTitle>Model Specification</CardTitle>
                 {modelPerformance.length > 0 ? (
-                  <ul>
+                  <ul className="space-y-2 pt-2">
                     {modelPerformance.map((metric, idx) => (
-                      <li key={idx}>
-                        <b>{metric.metric}</b>: {metric.value} — <em>{metric.description}</em>
+                      <li key={idx} className="border-b pb-2 last:border-b-0">
+                        <b className="font-semibold text-primary">{metric.metric}</b>: {metric.value} <br/> — <em className="text-sm text-muted-foreground">{metric.description}</em>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-muted-foreground">Run analysis to see model performance metrics.</p>
+                  <p className="text-muted-foreground">Run analysis to see model specification.</p>
                 )}
               </Card>
             </TabsContent>
