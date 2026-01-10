@@ -104,3 +104,10 @@ python manage.py runserver
 cd frontend
 npm install
 npm run dev
+```
+## License
+
+© 2026 Rishabh Verma. All Rights Reserved.
+
+This repository is proprietary. No reuse, redistribution, or modification
+is permitted without explicit permission.
