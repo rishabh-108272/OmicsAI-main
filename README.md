@@ -17,9 +17,9 @@ OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single
 
 ---
 
-## Key Features
+## 🧠 Key Features
 
-### 1. AI-Based Cancer Classification
+### 🔬 1. AI-Based Cancer Classification
 - Supports Liver, Lung, and Colorectal cancer models  
 - Built using Logistic Regression, Random Forest, MLP, and Ensemble Models  
 - Provides confidence scores for predictions  
@@ -34,7 +34,8 @@ OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single
 
 ### 4. AI Research Agent (RAG)
 - Retrieves scientific literature via custom embeddings  
-- Generates concise summaries using LLMs from HuggingFace  
+- Generates concise summaries using LLMs from HuggingFace
+- Orchestrated LLMs such as gene agent, drug agent and summary agent over langGraph.
 
 ### 5. Structural Analysis with AlphaFold3
 - Predicts 3D protein structures  
@@ -53,15 +54,10 @@ OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single
 - Django + FastAPI (planned microservices architecture)  
 - Python ML libraries (Scikit-Learn, TensorFlow, SHAP, NetworkX)  
 - REST API integration with HuggingFace & AlphaFold3  
-- JWT authentication (planned)
-
-### **Database**
-- PostgreSQL / MongoDB (planned)  
-- Stores user sessions, analysis outputs, and processing logs  
 
 ---
 
-## Workflow Pipeline
+## 📁 Workflow Pipeline
 
 
 All results are displayed on a unified dashboard for rapid interpretation.
@@ -91,7 +87,6 @@ All results are displayed on a unified dashboard for rapid interpretation.
 **ML/XAI:** Scikit-Learn, TensorFlow, SHAP, LIME  
 **Knowledge Graph:** NetworkX, STRING DB  
 **APIs:** HuggingFace, AlphaFold3  
-**Database:** PostgreSQL / MongoDB (planned)
 
 ---
 
@@ -109,3 +104,10 @@ python manage.py runserver
 cd frontend
 npm install
 npm run dev
+```
+## License
+
+© 2026 Rishabh Verma. All Rights Reserved.
+
+This repository is proprietary. No reuse, redistribution, or modification
+is permitted without explicit permission.
