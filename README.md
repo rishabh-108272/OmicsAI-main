@@ -1,11 +1,11 @@
-# 🧬 OmicsAI – SaaS Platform for Explainable Multi-Omics Analysis
+# OmicsAI – SaaS Platform for Explainable Multi-Omics Analysis
 
 OmicsAI is a SaaS-based platform designed to automate and simplify multi-omics analysis for cancer research.  
 It provides an end-to-end workflow combining AI-based classification, explainable biomarker discovery, drug repurposing, literature summarization, and 3D structural analysis — all without requiring any coding expertise.
 
 ---
 
-## 🚀 Overview
+## Overview
 
 OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single-patient gene expression data using a fully automated 5-step pipeline:
 
@@ -17,32 +17,32 @@ OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single
 
 ---
 
-## 🧠 Key Features
+## Key Features
 
-### 🔬 1. AI-Based Cancer Classification
+### 1. AI-Based Cancer Classification
 - Supports Liver, Lung, and Colorectal cancer models  
 - Built using Logistic Regression, Random Forest, MLP, and Ensemble Models  
 - Provides confidence scores for predictions  
 
-### 🧩 2. XAI-Powered Biomarker Discovery
+### 2. XAI-Powered Biomarker Discovery
 - SHAP and LIME visualizations  
 - Identifies top contributing biomarkers for each prediction  
 
-### 💊 3. Drug Repurposing Engine
+### 3. Drug Repurposing Engine
 - Built using STRING Protein-Protein Interaction Networks  
 - Graph traversal (BFS) suggests drugs targeting biomarkers or their key neighbors  
 
-### 📚 4. AI Research Agent (RAG)
+### 4. AI Research Agent (RAG)
 - Retrieves scientific literature via custom embeddings  
 - Generates concise summaries using LLMs from HuggingFace  
 
-### 🧫 5. Structural Analysis with AlphaFold3
+### 5. Structural Analysis with AlphaFold3
 - Predicts 3D protein structures  
 - Interactive molecular viewer for visualization  
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### **Frontend**
 - React.js  
@@ -61,14 +61,14 @@ OmicsAI enables clinicians, researchers, and bioinformaticians to analyze single
 
 ---
 
-## 📁 Workflow Pipeline
+## Workflow Pipeline
 
 
 All results are displayed on a unified dashboard for rapid interpretation.
 
 ---
 
-## 📊 Machine Learning Models
+## Machine Learning Models
 
 ### **Liver Cancer (Ensemble Model)**
 - Random Forest, Logistic Regression, Naive Bayes  
@@ -84,7 +84,7 @@ All results are displayed on a unified dashboard for rapid interpretation.
 
 ---
 
-## 📦 Tech Stack
+## Tech Stack
 
 **Frontend:** React.js, Tailwind CSS  
 **Backend:** Django, FastAPI, Python  
@@ -95,7 +95,7 @@ All results are displayed on a unified dashboard for rapid interpretation.
 
 ---
 
-## 🛠️ Installation
+## Installation
 
 ### Backend Setup
 ```bash

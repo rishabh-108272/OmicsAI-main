@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import validation_views
 
 app_name = 'classification'
 
@@ -12,4 +13,12 @@ urlpatterns = [
     path('classification/xai/graph/', views.generate_xai_graph, name='generate_xai_graph'),
     path('classification/drug-repurposing/', views.drug_repurposing_engine, name='drug_repurposing'),
     path('classification/ai-agent/', views.multi_agent_rag_view, name='ai_agent'),
+    
+    # Multi-Agentic AI Validation Endpoints
+    path('validation/classification/', validation_views.validate_classification, name='validate_classification'),
+    path('validation/biomarkers/', validation_views.validate_biomarkers, name='validate_biomarkers'),
+    path('validation/drug-repurposing/', validation_views.validate_drug_repurposing, name='validate_drug_repurposing'),
+    path('validation/protein/', validation_views.validate_protein_structure, name='validate_protein'),
+    path('validation/all/', validation_views.validate_all, name='validate_all'),
+    path('validation/agents/', validation_views.get_validation_agents, name='get_validation_agents'),
 ]
