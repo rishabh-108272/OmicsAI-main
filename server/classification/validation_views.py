@@ -12,10 +12,6 @@ from django.utils.decorators import method_decorator
 
 from .agents import (
     get_orchestrator,
-    get_classification_validator,
-    get_biomarker_validator,
-    get_drug_validator,
-    get_protein_validator,
     ValidationStatus
 )
 
@@ -47,16 +43,7 @@ def validate_classification(request):
     if not body:
         return JsonResponse({'error': 'No data provided'}, status=400)
     
-    try:
-        validator = get_classification_validator()
-        result = validator.validate(body)
-        return JsonResponse(result.to_dict(), status=200)
-    except Exception as e:
-        logger.error(f"Classification validation error: {e}")
-        return JsonResponse({
-            'error': f'Validation failed: {str(e)}',
-            'agent_name': 'Classification Validator'
-        }, status=500)
+    return JsonResponse({'deprecated': 'Use /validate-all/ with new agents (pathway_reasoning, drug_association, literature_evidence)'}, status=410)
 
 
 @csrf_exempt
@@ -83,16 +70,7 @@ def validate_biomarkers(request):
     if not body:
         return JsonResponse({'error': 'No data provided'}, status=400)
     
-    try:
-        validator = get_biomarker_validator()
-        result = validator.validate(body)
-        return JsonResponse(result.to_dict(), status=200)
-    except Exception as e:
-        logger.error(f"Biomarker validation error: {e}")
-        return JsonResponse({
-            'error': f'Validation failed: {str(e)}',
-            'agent_name': 'Biomarker Validator'
-        }, status=500)
+    return JsonResponse({'deprecated': 'Use /validate-all/ with new agents'}, status=410)
 
 
 @csrf_exempt
@@ -125,16 +103,7 @@ def validate_drug_repurposing(request):
     if not body:
         return JsonResponse({'error': 'No data provided'}, status=400)
     
-    try:
-        validator = get_drug_validator()
-        result = validator.validate(body)
-        return JsonResponse(result.to_dict(), status=200)
-    except Exception as e:
-        logger.error(f"Drug repurposing validation error: {e}")
-        return JsonResponse({
-            'error': f'Validation failed: {str(e)}',
-            'agent_name': 'Drug Repurposing Validator'
-        }, status=500)
+    return JsonResponse({'deprecated': 'Use /validate-all/ with new agents'}, status=410)
 
 
 @csrf_exempt
@@ -161,16 +130,7 @@ def validate_protein_structure(request):
     if not body:
         return JsonResponse({'error': 'No data provided'}, status=400)
     
-    try:
-        validator = get_protein_validator()
-        result = validator.validate(body)
-        return JsonResponse(result.to_dict(), status=200)
-    except Exception as e:
-        logger.error(f"Protein validation error: {e}")
-        return JsonResponse({
-            'error': f'Validation failed: {str(e)}',
-            'agent_name': 'Protein Validator'
-        }, status=500)
+    return JsonResponse({'deprecated': 'Use /validate-all/ with new agents'}, status=410)
 
 
 @csrf_exempt

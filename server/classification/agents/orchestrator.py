@@ -17,10 +17,9 @@ from .base_agent import (
     ConfidenceLevel,
     ValidationCheck
 )
-from .classification_validator import get_classification_validator
-from .biomarker_validator import get_biomarker_validator
-from .drug_validator import get_drug_validator
-from .protein_validator import get_protein_validator
+from .pathway_reasoning_agent import get_pathway_reasoning_agent
+from .drug_association_agent import get_drug_association_agent
+from .literature_evidence_agent import get_literature_evidence_agent
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +28,10 @@ class AgentOrchestrator:
     """
     Orchestrates multiple validation agents for comprehensive analysis
     
-    Coordinates:
-    1. Classification Validation Agent
-    2. Biomarker Discovery Validation Agent
-    3. Drug Repurposing Validation Agent
-    4. Protein Structure Validation Agent
+    Coordinates NEW agents:
+    1. Pathway Reasoning Agent (KEGG/UniProt pathway enrichment)  
+    2. Drug Association Agent (DrugBank/ClinicalTrials drug links)
+    3. Literature Evidence Agent (LIVE PubMed evidence)
     
     Features:
     - Parallel agent execution
@@ -52,12 +50,11 @@ class AgentOrchestrator:
         self.enable_parallel = enable_parallel
         self.logger = logging.getLogger(__name__)
         
-        # Initialize agents
+        # Initialize NEW agents
         self.agents = {
-            'classification': get_classification_validator(),
-            'biomarker': get_biomarker_validator(),
-            'drug': get_drug_validator(),
-            'protein': get_protein_validator()
+            'pathway_reasoning': get_pathway_reasoning_agent(),
+            'drug_association': get_drug_association_agent(),
+            'literature_evidence': get_literature_evidence_agent()
         }
         
         self.logger.info("AgentOrchestrator initialized with agents: %s", 
@@ -366,25 +363,11 @@ class AgentOrchestrator:
         
         return insights
     
-    def validate_classification(self, data: Dict[str, Any]) -> ValidationResult:
-        """Validate classification results only"""
-        return self.agents['classification'].validate(data)
-    
-    def validate_biomarkers(self, data: Dict[str, Any]) -> ValidationResult:
-        """Validate biomarker discovery results only"""
-        return self.agents['biomarker'].validate(data)
-    
-    def validate_drug_repurposing(self, data: Dict[str, Any]) -> ValidationResult:
-        """Validate drug repurposing results only"""
-        return self.agents['drug'].validate(data)
-    
-    def validate_protein_structure(self, data: Dict[str, Any]) -> ValidationResult:
-        """Validate protein structure results only"""
-        return self.agents['protein'].validate(data)
-    
     def get_available_agents(self) -> List[str]:
-        """Get list of available agent types"""
+        """Get list of available agent types - NEW: pathway_reasoning, drug_association, literature_evidence"""
         return list(self.agents.keys())
+
+    # Use validate_all(data, agent_types=['pathway_reasoning']) for single agents
 
 
 # Singleton instance

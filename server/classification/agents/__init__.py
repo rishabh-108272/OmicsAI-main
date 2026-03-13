@@ -5,10 +5,9 @@ Multi-Agentic AI Validation System for OmicsAI
 from .base_agent import BaseAgent, ValidationResult, ValidationStatus, ConfidenceLevel, ValidationCheck
 from .groq_client import GroqClient, get_groq_client
 from .orchestrator import AgentOrchestrator, get_orchestrator, run_validation_orchestrator
-from .classification_validator import ClassificationValidator, get_classification_validator
-from .biomarker_validator import BiomarkerValidator, get_biomarker_validator
-from .drug_validator import DrugRepurposingValidator, get_drug_validator
-from .protein_validator import ProteinValidator, get_protein_validator
+from .pathway_reasoning_agent import get_pathway_reasoning_agent
+from .drug_association_agent import get_drug_association_agent
+from .literature_evidence_agent import get_literature_evidence_agent
 
 __all__ = [
     # Base classes
@@ -28,13 +27,8 @@ __all__ = [
     'run_validation_orchestrator',
     
     # Validators
-    'ClassificationValidator',
-    'get_classification_validator',
-    'BiomarkerValidator', 
-    'get_biomarker_validator',
-    'DrugRepurposingValidator',
-    'get_drug_validator',
-    'ProteinValidator',
-    'get_protein_validator',
+'get_pathway_reasoning_agent',
+    'get_drug_association_agent',
+    'get_literature_evidence_agent',
 ]
 
