@@ -63,6 +63,7 @@ class ClassificationResult(models.Model):
     class_label = models.CharField(max_length=100)
     probability = models.FloatField(validators=[MinValueValidator(0), MaxValueValidator(100)])
     confidence_score = models.FloatField(default=0.0)
+    top_biomarkers = models.JSONField(default=list, blank=True, help_text="Top biomarkers/genes for agents")  # NEW
     
     class Meta:
         db_table = 'classification_results'

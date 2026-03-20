@@ -20,136 +20,16 @@ from .ml_service import ml_service
 from .colorectal_cancer import colorectal_cancer_service
 from .liver_cancer import liver_cancer_service
 import shap
+from django.http import HttpResponse
 from .ai_agent import run_multi_agent_rag
+from .agents.orchestrator import get_orchestrator
 logger = logging.getLogger(__name__)
 
-def align_patient_vector(df, feature_names):
-    """
-    Align single patient input vector from CSV df (gene rows) to match model's expected features.
-    Missing genes have zero values.
-    Returns a numpy array reshaped to (1, n_features).
-    """
-    series = df.iloc[:, 0]
-    values = [series.get(g, 0.0) for g in feature_names]
-    values_array = np.array(values).reshape(1, -1)  # Reshape to (1, n)
-    return values_array
 
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def analyze_classification(request):
-    try:
-        if 'file' not in request.FILES:
-            return JsonResponse({'error': 'No file uploaded'}, status=400)
-        uploaded_file = request.FILES['file']
-        if not uploaded_file.name.endswith('.csv'):
-            return JsonResponse({'error': 'Only CSV files are allowed'}, status=400)
 
-        model_type = request.POST.get('model_type', 'lung_cancer')
-        age = request.POST.get('age')
-        gender = request.POST.get('gender')
-        patient_id = request.POST.get('patient_id', f'PAT-{uuid.uuid4().hex[:8].upper()}')
 
-        if not age or not gender:
-            return JsonResponse({'error': 'Age and gender are required'}, status=400)
-
-        try:
-            age = int(age)
-            if age < 0 or age > 150:
-                return JsonResponse({'error': 'Invalid age'}, status=400)
-        except ValueError:
-            return JsonResponse({'error': 'Age must be a number'}, status=400)
-
-        if model_type == 'lung_cancer':
-            service = ml_service
-        elif model_type == 'colorectal_cancer':
-            service = colorectal_cancer_service
-        elif model_type == 'liver_cancer':
-            service = liver_cancer_service
-        else:
-            return JsonResponse({'error': f'Unknown model type {model_type}'}, status=400)
-
-        if not service.model_loaded:
-            return JsonResponse({'error': 'ML model not loaded.'}, status=500)
-
-        file_path = f'uploads/{patient_id}_{uploaded_file.name}'
-        saved_path = default_storage.save(file_path, uploaded_file)
-
-        with transaction.atomic():
-            patient, created = Patient.objects.get_or_create(
-                patient_id=patient_id,
-                defaults={'age': age, 'gender': gender}
-            )
-            session = AnalysisSession.objects.create(
-                patient=patient,
-                model_type=model_type,
-                file_name=uploaded_file.name,
-                file_path=saved_path,
-                file_size=uploaded_file.size,
-                status='processing'
-            )
-            try:
-                full_path = default_storage.path(saved_path)
-                df = pd.read_csv(full_path, index_col=0)
-
-                if df.empty:
-                    raise ValueError("CSV file is empty")
-
-                if model_type in ('colorectal_cancer', 'liver_cancer'):
-                    processed_input = service.preprocess_patient_data(df)
-                    predicted_class, predicted_prob = service.predict(processed_input)
-                    individual_results = service.format_results(predicted_class, predicted_prob)
-                    model_performance = []
-                else:
-                    data_array, gene_names = service.preprocess_rna_seq_data(df)
-                    predicted_classes, probabilities = service.predict(data_array)
-                    individual_results = service.format_classification_results(
-                        predicted_classes, probabilities, gene_names, data_array.flatten()
-                    )
-                    model_performance = service.calculate_model_performance()
-
-                ClassificationResult.objects.create(
-                    analysis_session=session,
-                    result_type=f'{model_type}_classification',
-                    class_label=individual_results['patient_prediction']['label'],
-                    probability=individual_results['patient_prediction']['confidence'],
-                    confidence_score=1
-                )
-
-                for metric in model_performance:
-                    ModelPerformance.objects.create(
-                        analysis_session=session,
-                        metric_name=metric['metric'],
-                        metric_value=metric['value'],
-                        metric_description=metric['description']
-                    )
-
-                session.status = 'completed'
-                session.completed_at = timezone.now()
-                session.save()
-
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-
-                return JsonResponse({
-                    'session_id': str(session.session_id),
-                    'patient_id': patient_id,
-                    'classification_results': individual_results['patient_prediction'],
-                    'model_performance': model_performance,
-                    'gene_heatmap_data': individual_results.get('gene_heatmap_data'),
-                    'status': 'success',
-                })
-            except Exception as e:
-                session.status = 'failed'
-                session.error_message = str(e)
-                session.save()
-                logger.error(f'Analysis failed: {e}')
-                raise e
-
-    except Exception as e:
-        logger.error(f'Request processing failed: {e}')
-        return JsonResponse({'error': f'Analysis failed: {e}'}, status=500)
 
 
 @csrf_exempt
@@ -542,6 +422,7 @@ def export_report(request, session_id):
         logger.error(f"Error in export: {str(e)}")
         return JsonResponse({'error': f'Export failed: {str(e)}'}, status=500)
 
+# Utility for agents - make importable
 DGIDB_GRAPHQL_URL = "https://dgidb.org/api/graphql"
 
 DGIDB_GRAPHQL_QUERY = """
@@ -575,8 +456,8 @@ query DrugInteractions($genes: [String!]) {
 """
 
 
-
 def fetch_dgidb_drugs_via_graphql(genes):
+
     """
     Query DGIdb GraphQL API for drug-gene interactions.
 
@@ -686,6 +567,63 @@ def fetch_dgidb_drugs_via_graphql(genes):
     return gene_to_drugs
 
 
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def run_agents(request):
+    """New agent orchestrator endpoint - session_id or csv_file."""
+    try:
+        session_id = request.POST.get('session_id')
+        csv_file = request.FILES.get('csv_file')
+        cancer_type = request.POST.get('cancer_type', 'lung')
+
+        if not session_id and not csv_file:
+            return JsonResponse({'error': 'Require session_id or csv_file'}, status=400)
+
+        # Extract live biomarkers
+        try:
+            if session_id:
+                session = AnalysisSession.objects.get(session_id=session_id)
+                result = session.results.first()
+                biomarkers = result.top_biomarkers if result and result.top_biomarkers else []
+            elif csv_file:
+                tmp_path = default_storage.save(f'tmp/agent_{uuid.uuid4()}.csv', csv_file)
+                full_path = default_storage.path(tmp_path)
+                df = pd.read_csv(full_path)
+                if not df.empty and df.select_dtypes(include=[np.number]).shape[1] > 0:
+                    variances = df.var(numeric_only=True).nlargest(50)
+                    biomarkers = variances.index.tolist()
+                else:
+                    biomarkers = []
+                os.remove(full_path)
+            else:
+                biomarkers = []
+        except Exception as extract_err:
+            logger.warning(f"Biomarker extraction failed: {extract_err}")
+            biomarkers = []
+
+        input_data = {
+            'biomarkers': biomarkers,
+            'cancer_type': cancer_type
+        }
+
+        orchestrator = get_orchestrator()
+        results = orchestrator.run_analysis(input_data)
+
+
+        return JsonResponse(results, status=200)
+
+    except Exception as e:
+        logger.error(f"Agents run failed: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def agents_dashboard(request):
+    """Serve HTML dashboard."""
+    with open('server/agents_dashboard.html', 'r') as f:
+        html = f.read()
+    return HttpResponse(html)
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -884,8 +822,7 @@ def multi_agent_rag_view(request):
     return JsonResponse(result, status=200)
   except Exception as e:
     # Log and return safe error
-    import logging
-    logging.exception("Multi-agent RAG error: %s", e)
+    logger.exception(f"Multi-agent RAG error: {e}")
     return JsonResponse(
       {"error": "Multi-agent RAG pipeline failed.", "details": str(e)},
       status=500,
