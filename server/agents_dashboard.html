@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmicsAI Agents Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .agent-card { transition: all 0.3s; }
+        .agent-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+                🧬 OmicsAI Agents Dashboard
+            </h1>
+            <p class="text-xl text-gray-600">Pathway · Drug · Literature Analysis</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-12 agent-card">
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">📤 Input Data</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Session ID (Live Data)</label>
+                    <input type="text" id="sessionId" placeholder="e.g. abc123-def456" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">CSV File (Direct)</label>
+                    <input type="file" id="csvFile" accept=".csv" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="mt-6 flex gap-4">
+                <select id="cancerType" class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="lung">Lung Cancer</option>
+                    <option value="colorectal">Colorectal Cancer</option>
+                    <option value="liver">Liver Cancer</option>
+                </select>
+                <button onclick="runAgents()" class="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg transition-all duration-200">
+                    🚀 Run Agents
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-2xl shadow-2xl text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-lg font-semibold text-gray-700">Running Pathway, Drug & Literature Agents...</p>
+            </div>
+        </div>
+
+        <!-- Results Tabs -->
+        <div id="results" class="hidden">
+            <!-- Summary Card -->
+            <div class="grid md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-green-400 to-green-500 text-white p-6 rounded-2xl shadow-xl agent-card">
+                    <div class="text-3xl font-bold">✓</div>
+                    <div class="text-xl font-semibold mt-2" id="overallStatus">Complete</div>
+                    <div class="text-sm opacity-90 mt-1" id="agentCount">3/3 Agents</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-400 to-blue-500 text-white p-6 rounded-2xl shadow-xl agent-card">
+                    <div class="text-3xl font-bold" id="highConfCount">3</div>
+                    <div class="text-xl font-semibold mt-2">High Confidence</div>
+                    <div class="text-sm opacity-90 mt-1" id="totalChecks">12 Checks</div>
+                </div>
+                <div class="bg-gradient-to-br from-purple-400 to-purple-500 text-white p-6 rounded-2xl shadow-xl agent-card">
+                    <div class="text-3xl font-bold" id="topDrugs">5</div>
+                    <div class="text-xl font-semibold mt-2">Drug Candidates</div>
+                    <div class="text-sm opacity-90 mt-1" id="pathwayCount">4 Pathways</div>
+                </div>
+            </div>
+
+            <!-- Agent Tabs -->
+            <div class="bg-white rounded-3xl shadow-2xl p-8 mb-8">
+                <div class="tabs flex border-b border-gray-200 mb-8">
+                    <button class="tab-btn px-6 py-3 font-semibold text-blue-600 border-b-2 border-blue-600" onclick="showTab('pathway')">🧬 Pathways</button>
+                    <button class="tab-btn px-6 py-3 font-semibold text-gray-600 hover:text-blue-600" onclick="showTab('drug')">💊 Drugs</button>
+                    <button class="tab-btn px-6 py-3 font-semibold text-gray-600 hover:text-blue-600" onclick="showTab('literature')">📚 Literature</button>
+                    <button class="tab-btn px-6 py-3 font-semibold text-gray-600 hover:text-blue-600" onclick="showTab('summary')">📊 Summary</button>
+                </div>
+
+                <!-- Pathway Tab -->
+                <div id="pathway-tab" class="tab-content">
+                    <h3 class="text-2xl font-bold mb-6 text-gray-800">🧬 Pathway Enrichment</h3>
+                    <div id="pathway-results" class="grid md:grid-cols-2 gap-6"></div>
+                </div>
+
+                <!-- Drug Tab -->
+                <div id="drug-tab" class="tab-content hidden">
+                    <h3 class="text-2xl font-bold mb-6 text-gray-800">💊 Drug Associations</h3>
+                    <div id="drug-results" class="space-y-4"></div>
+                </div>
+
+                <!-- Literature Tab -->
+                <div id="literature-tab" class="tab-content hidden">
+                    <h3 class="text-2xl font-bold mb-6 text-gray-800">📚 Literature Evidence</h3>
+                    <div id="literature-results" class="space-y-4"></div>
+                </div>
+
+                <!-- Summary Tab -->
+                <div id="summary-tab" class="tab-content hidden">
+                    <h3 class="text-2xl font-bold mb-6 text-gray-800">📊 Cross-Agent Summary</h3>
+                    <div id="summary-results"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentResults = null;
+
+        async function runAgents() {
+            const sessionId = document.getElementById('sessionId').value.trim();
+            const csvFile = document.getElementById('csvFile').files[0];
+            const cancerType = document.getElementById('cancerType').value;
+
+            if (!sessionId && !csvFile) {
+                alert('Please provide Session ID or CSV file');
+                return;
+            }
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('cancer_type', cancerType);
+                
+                if (sessionId) {
+                    formData.append('session_id', sessionId);
+                } else if (csvFile) {
+                    formData.append('csv_file', csvFile);
+                }
+
+                const response = await fetch('/run-agents/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                currentResults = data;
+                displayResults(data);
+                document.getElementById('results').classList.remove('hidden');
+                
+            } catch (error) {
+                alert('Request failed: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function displayResults(data) {
+            // Overall stats
+            const meta = data.orchestrator_metadata;
+            document.getElementById('overallStatus').textContent = data.overall_status.toUpperCase();
+            document.getElementById('agentCount').textContent = `${Object.keys(data.agent_results).length}/3 Agents`;
+            document.getElementById('highConfCount').textContent = data.status_counts.passed || 0;
+            document.getElementById('totalChecks').textContent = (data.all_checks || []).length + ' Checks';
+            
+            // Update other stats from insights
+            const insights = data.cross_agent_insights || {};
+            document.getElementById('topDrugs').textContent = insights.high_confidence?.length || 0;
+            document.getElementById('pathwayCount').textContent = insights.consensus_passed?.length || 0;
+
+            // Agent tabs
+            displayPathwayTab(data.agent_results.pathway);
+            displayDrugTab(data.agent_results.drug);
+            displayLiteratureTab(data.agent_results.literature);
+            displaySummaryTab(data);
+        }
+
+        function displayPathwayTab(result) {
+            const container = document.getElementById('pathway-results');
+            container.innerHTML = '';
+
+            if (!result) return;
+
+            const checks = result.checks || [];
+            checks.forEach(check => {
+                const statusClass = check.status === 'passed' ? 'bg-green-100 text-green-800' : 
+                                  check.status === 'warning' ? 'bg-yellow-100 text-yellow-800' : 
+                                  'bg-red-100 text-red-800';
+                
+                const card = document.createElement('div');
+                card.className = `p-6 border rounded-xl ${statusClass} hover:shadow-md transition-shadow`;
+                card.innerHTML = `
+                    <div class="font-bold text-lg mb-2">${check.name}</div>
+                    <div class="text-sm mb-4">${check.message}</div>
+                    <div class="text-xs opacity-75">Confidence: ${check.confidence}</div>
+                    <pre class="mt-4 text-xs bg-gray-50 p-3 rounded overflow-auto" style="max-height: 200px">${JSON.stringify(check.evidence, null, 2)}</pre>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function displayDrugTab(result) {
+            const container = document.getElementById('drug-results');
+            container.innerHTML = '';
+
+            if (!result) return;
+
+            const recs = result.recommendations || [];
+            recs.forEach(rec => {
+                const card = document.createElement('div');
+                card.className = 'p-6 bg-gradient-to-r from-indigo-50 to-purple-50 border rounded-xl hover:shadow-lg';
+                card.innerHTML = `<div class="font-semibold text-indigo-800">${rec}</div>`;
+                container.appendChild(card);
+            });
+
+            // Drug candidates table
+            const candidates = result.metadata?.drug_candidates || [];
+            if (candidates.length) {
+                let tableHTML = `<h4 class="font-bold text-xl mt-8 mb-4 text-gray-800">Top Drug Candidates</h4>
+                <div class="overflow-x-auto">
+                <table class="w-full bg-white border rounded-lg shadow">
+                    <thead><tr class="bg-gray-50">
+                        <th class="p-3 text-left font-semibold">Drug</th>
+                        <th class="p-3 text-left font-semibold">Target</th>
+                        <th class="p-3 text-left font-semibold">Score</th>
+                    </tr></thead>
+                    <tbody>`;
+                candidates.slice(0,10).forEach(c => {
+                    tableHTML += `<tr class="border-t hover:bg-gray-50">
+                        <td class="p-3 font-medium">${c.drug_name || 'N/A'}</td>
+                        <td class="p-3">${c.gene}</td>
+                        <td class="p-3">${(c.score*100).toFixed(1)}%</td>
+                    </tr>`;
+                });
+                tableHTML += '</tbody></table></div>';
+                container.innerHTML += tableHTML;
+            }
+        }
+
+        function displayLiteratureTab(result) {
+            const container = document.getElementById('literature-results');
+            container.innerHTML = '';
+
+            if (!result) return;
+
+            const evidence = result.metadata?.evidence || [];
+            evidence.slice(0,8).forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'p-6 bg-gradient-to-r from-rose-50 to-pink-50 border rounded-xl hover:shadow-lg';
+                card.innerHTML = `
+                    <div class="font-bold text-lg mb-2">${item.gene}</div>
+                    <ul class="space-y-1 text-sm">
+                        ${item.evidence.slice(0,3).map(e => `<li class="text-gray-700">📄 ${e}</li>`).join('')}
+                    </ul>
+                `;
+                container.appendChild(card);
+            });
+
+            const synthesis = result.metadata?.synthesis?.substring(0, 800);
+            if (synthesis) {
+                container.innerHTML += `
+                    <div class="mt-8 p-6 bg-gradient-to-r from-emerald-50 to-teal-50 border rounded-xl">
+                        <h4 class="font-bold text-xl mb-4 text-emerald-800">🔬 AI Literature Synthesis</h4>
+                        <p class="whitespace-pre-wrap text-gray-700">${synthesis}...</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displaySummaryTab(data) {
+            const container = document.getElementById('summary-results');
+            const insights = data.cross_agent_insights || {};
+            
+            container.innerHTML = `
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-gradient-to-br from-emerald-400/20 to-green-400/20 border-2 border-emerald-200 p-6 rounded-2xl">
+                        <h4 class="font-bold text-lg mb-2 text-emerald-800">✅ Consensus Passed</h4>
+                        <div class="text-2xl font-black text-emerald-600">${insights.consensus_passed?.length || 0}</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-yellow-400/20 to-orange-400/20 border-2 border-yellow-200 p-6 rounded-2xl">
+                        <h4 class="font-bold text-lg mb-2 text-yellow-800">⚠️ Warnings</h4>
+                        <div class="text-2xl font-black text-yellow-600">${insights.consensus_warning?.length || 0}</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-blue-400/20 to-indigo-400/20 border-2 border-blue-200 p-6 rounded-2xl">
+                        <h4 class="font-bold text-lg mb-2 text-blue-800">⭐ High Confidence</h4>
+                        <div class="text-2xl font-black text-blue-600">${insights.high_confidence?.length || 0}</div>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="p-6 bg-white border rounded-xl shadow-lg">
+                        <h4 class="font-bold text-xl mb-4 text-gray-800">📋 Actionable Recommendations</h4>
+                        <ul class="space-y-2" id="recs-list"></ul>
+                    </div>
+                    <div class="p-6 bg-white border rounded-xl shadow-lg">
+                        <h4 class="font-bold text-xl mb-4 text-gray-800">🔍 Cross-Agent Insights</h4>
+                        <div id="insights-list"></div>
+                    </div>
+                </div>
+            `;
+
+            // Recommendations
+            const recs = data.recommendations || [];
+            const recsList = document.getElementById('recs-list');
+            recs.slice(0,8).forEach(rec => {
+                const li = document.createElement('li');
+                li.className = 'flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors';
+                li.innerHTML = `<div class="w-5 h-5 bg-blue-500 rounded-full flex-shrink-0 mt-0.5 mr-3"></div><span>${rec}</span>`;
+                recsList.appendChild(li);
+            });
+
+            // Insights
+            const insightsList = document.getElementById('insights-list');
+            const insightTypes = ['consensus_passed', 'consensus_warning', 'high_confidence'];
+            insightTypes.forEach(type => {
+                const items = insights[type] || [];
+                if (items.length) {
+                    const section = document.createElement('div');
+                    section.className = 'mb-4';
+                    section.innerHTML = `<div class="font-semibold text-sm uppercase tracking-wide text-gray-500 mb-2">${type.replace('_', ' ').toUpperCase()}</div>
+                        <ul class="space-y-1 text-sm">`;
+                    items.slice(0,5).forEach(item => {
+                        section.innerHTML += `<li>• ${item.check || item.finding || JSON.stringify(item)}</li>`;
+                    });
+                    section.innerHTML += '</ul>';
+                    insightsList.appendChild(section);
+                }
+            });
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600'));
+            
+            document.getElementById(tab + '-tab').classList.remove('hidden');
+            event.target.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+        }
+
+        // Auto-refresh every 30s if session mode
+        setInterval(() => {
+            if (currentResults && document.getElementById('sessionId').value) {
+                runAgents();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
